@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# IDEs & OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local Storage / Data caches
+data/
+storage/
+downloads/
+artifacts/
+*.pdf
+*.csv
+*.sqlite3
+
+# Test & Coverage
+.coverage
+htmlcov/
+.pytest_cache/

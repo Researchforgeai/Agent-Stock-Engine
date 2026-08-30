@@ -86,12 +86,11 @@ stock_analysis/
 │       │   ├── models/                           # Modular Pydantic domain models
 │       │   │   ├── __init__.py                   # Model registry & public exports
 │       │   │   ├── enums.py                      # Exchange, RecommendationAction, RiskLevel
-│       │   │   ├── inputs.py                     # AnalyzeStockInput, DiscoverStocksInput
+│       │   │   ├── analysis.py                   # On-demand analysis models (AnalyzeStockInput, AnalysisReport)
+│       │   │   ├── discovery.py                  # Weekly discovery models (DiscoverStocksInput, WeeklyDigest)
 │       │   │   ├── technicals.py                 # Technical indicators & trend analysis
 │       │   │   ├── fundamentals.py               # Growth, margins, ROCE, debt health
-│       │   │   ├── valuation.py                  # Multi-year price matrix & scenario models
-│       │   │   ├── thesis.py                     # InvestmentThesis & ThesisAntiThesis
-│       │   │   └── discovery.py                  # WeeklyDigest & Multibagger candidate models
+│       │   │   └── valuation.py                  # Multi-year price matrix & scenario models
 │       │   ├── use_cases.py                      # AnalyzeStockUseCase, WeeklyDiscoveryUseCase
 │       │   ├── unit_of_work.py                   # Atomic transaction context manager (`with uow:`)
 │       │   ├── repository.py                     # Pydantic-to-SQLite/Postgres JSON store (NO ORM!)

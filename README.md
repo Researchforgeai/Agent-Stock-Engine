@@ -101,17 +101,23 @@ stock_analysis/
 │       │   │
 │       │   └── outbound/                                 # SECONDARY ADAPTERS (Driven)
 │       │       ├── __init__.py
-│       │       ├── data/                                 # Market & Financial data adapters (implements Outbound Ports)
+│       │       ├── data/                                 # Market & Financial data fetchers (implements Outbound Ports)
 │       │       │   ├── __init__.py
 │       │       │   ├── financials.py                     # Normalized balance sheets, P&L, cash flows, ratios
 │       │       │   ├── market_data.py                    # Live quotes, historical valuation multiples, OHLCV
 │       │       │   ├── screener.py                       # External stock screener API client
 │       │       │   ├── transcripts.py                    # Concall transcripts & management guidance search
 │       │       │   └── mcp_server.py                     # FastMCP registry exposing all data adapters via MCP protocol
+│       │       ├── tools/                                # LLM-CALLABLE TOOL WRAPPERS (independent of any specific agent)
+│       │       │   ├── __init__.py
+│       │       │   ├── financials_tool.py                # Wraps financials data adapter as LLM-callable tool schema
+│       │       │   ├── market_data_tool.py               # Wraps market data adapter as LLM-callable tool schema
+│       │       │   ├── screener_tool.py                  # Wraps screener adapter as LLM-callable tool schema
+│       │       │   └── transcripts_tool.py               # Wraps transcripts adapter as LLM-callable tool schema
 │       │       ├── repository.py                         # Implements ThesisRepositoryPort (Pydantic-to-SQLite/Postgres, NO ORM)
 │       │       └── notifications.py                      # Implements NotificationPort (Telegram / Email alerts)
 │       │
-│       ├── agents/                                       # AI REASONING LAYER (Specialist LLM Agents)
+│       ├── agents/                                       # AI REASONING LAYER (Pure Reasoning — No I/O)
 │       │   ├── __init__.py
 │       │   ├── prompts.py                                # System prompts & analytical guardrails
 │       │   ├── specialists.py                            # FundamentalsAgent, ValuationAgent, GovernanceAgent
@@ -150,7 +156,8 @@ stock_analysis/
 | **`app/domain/`** | Domain Core — pure business entities and value objects encoding the investment thesis logic. | **Zero** knowledge of FastAPI, databases, or external APIs. No I/O of any kind. |
 | **`app/ports/outbound.py`** | Abstract Port interfaces defining what the Application Core needs from the outside world. | **Zero** knowledge of concrete implementations. Pure Python `Protocol` or `ABC` definitions. |
 | **`adapters/outbound/`** | Secondary Adapters — concrete implementations of Outbound Ports (market data APIs, DB, notifications). | **Zero** domain logic. Purely maps external data to the contracts defined by Outbound Ports. |
-| **`agents/`** | AI Reasoning Layer — specialist LLM agents invoked by Use Cases to produce domain value objects. | **Zero** knowledge of FastAPI routes or DB tables. Receives Port interfaces via dependency injection. |
-| **`bootstrap.py`** | Composition Root. | The **only** place where concrete adapters are instantiated and wired to ports and use cases. |
+| **`adapters/outbound/tools/`** | LLM-Callable Tool Wrappers — adapts raw outbound data fetchers into structured, schema-validated tool definitions consumable by any LLM agent or orchestrator. Independent of any specific agent. | **Zero** domain logic or agent-specific reasoning. Purely defines the callable interface (name, description, args schema) and delegates to the corresponding data adapter. |
+| **`agents/`** | AI Reasoning Layer — specialist LLM agents invoked by Use Cases to produce domain value objects. Consumes tools from `adapters/outbound/tools/` via dependency injection. | **Zero** knowledge of FastAPI routes, DB tables, or external API wire formats. Pure reasoning and prompt logic only. |
+| **`bootstrap.py`** | Composition Root. | The **only** place where concrete adapters are instantiated and wired to ports, tools, and use cases. |
 
 ---

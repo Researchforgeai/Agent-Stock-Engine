@@ -14,46 +14,53 @@ An AI-assisted financial intelligence engine designed for evidence-backed fundam
 
 ---
 
-## 2. Architectural Overview: The 3 Decoupled Tiers
+## 2. Architectural Overview: Hexagonal Architecture (Ports & Adapters)
 
-The system follows a strict 3-tier decoupled architecture where every layer has a single responsibility and zero unnecessary dependencies:
+The system follows a **Hexagonal (Ports & Adapters)** architecture where the Application Core is completely isolated from all external concerns. External systems (HTTP, CLI, databases, market data APIs) interact with the Core exclusively through well-defined Port interfaces.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                          TIER 1: `tools/` (Data & MCP)                          │
-│  (Data Fetchers, Tool Callables & MCP Endpoints)                                │
-│  • financials.py              • market_data.py                                  │
-│  • transcripts.py             • screener.py                                     │
-│  • mcp_server.py (FastMCP wrapper)                                              │
-│  (Pure data fetching & API normalization — 0 knowledge of Agents or DB)         │
-└────────────────────────────────────────┬────────────────────────────────────────┘
-                                         │ Injected into (as callable tools)
-                                         ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                          TIER 2: `agents/` (Reasoning)                          │
-│  (LLM Prompt Chains, Specialist Agents & Graph Orchestrator)                    │
-│  • prompts.py                 • specialists.py                                  │
-│  • orchestrator.py (LangGraph )                                                 │
-│  (Pure cognitive reasoning — 0 knowledge of FastAPI routes or DB tables)        │
-└────────────────────────────────────────┬────────────────────────────────────────┘
-                                         │ Invoked by
-                                         ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                          TIER 3: `app/` (Backend Core)                          │
-│  (Business Logic, Domain Models & Persistence)                                  │
-│  • models/ (Pydantic Domain Schemas & Contracts)                                │
-│  • use_cases.py (Business Handlers & Workflow Orchestration)                    │
-│  • unit_of_work.py (Transaction Context Manager)                                │
-│  • repository.py (Pydantic-to-SQLite/Postgres JSON Store — NO ORM!)             │
-│  • notifications.py (Telegram / Email Alerts)                                   │
-└────────────────────────────────────────┬────────────────────────────────────────┘
-                                         ▲
-                                         │ Called by
-┌────────────────────────────────────────┴────────────────────────────────────────┐
-│                      TIER 4: `entrypoints/` (Drivers)                           │
-│  (Inbound HTTP, CLI, and Scheduled Cron triggers)                               │
-│  • api.py (FastAPI)           • cli.py (Typer)     • scheduler.py (Cron)        │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                             PRIMARY ADAPTERS (Driving / Inbound)                                     │
+│               FastAPI (REST)           Typer (CLI)          APScheduler (Cron)                       │
+└──────────────────────────┬───────────────────┬─────────────────────┬────────────────────────────────┘
+                           │                   │                     │
+                           │  AnalyzeStockCommand / DiscoverStocksCommand (Inbound DTOs)
+                           ▼                   ▼                     ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                        APPLICATION CORE (Inside)                                     │
+│                                                                                                      │
+│   ┌──────────────────────────────────────────────────────────────────────────────────────────────┐   │
+│   │                              APPLICATION LAYER                                               │   │
+│   │   commands.py            use_cases.py                                                        │   │
+│   │   • AnalyzeStockCommand  • AnalyzeStockUseCase ──────────────────────────────────────────►  │   │
+│   │   • DiscoverStocksCommand• WeeklyDiscoveryUseCase                                           │   │
+│   └──────────────────────────────────────────────────────────────────────────────────────────────┘   │
+│                                             │                                                        │
+│                                             ▼                                                        │
+│   ┌──────────────────────────────────────────────────────────────────────────────────────────────┐   │
+│   │                                DOMAIN CORE                                                   │   │
+│   │   domain/                                                                                    │   │
+│   │   • InvestmentThesis (Aggregate Root)   • ValuationScenario (Value Object)                   │   │
+│   │   • FundamentalsAudit (Value Object)    • TechnicalAudit (Value Object)                      │   │
+│   │   • WeeklyDigest (Entity)               • GovernanceAudit (Value Object)                     │   │
+│   └──────────────────────────────────────────────────────────────────────────────────────────────┘   │
+│                                             │                                                        │
+│                                             ▼                                                        │
+│   ┌──────────────────────────────────────────────────────────────────────────────────────────────┐   │
+│   │                               OUTBOUND PORTS (Abstract Interfaces)                           │   │
+│   │   ports/outbound.py                                                                          │   │
+│   │   • FinancialDataPort       • MarketDataPort        • TranscriptPort                         │   │
+│   │   • ThesisRepositoryPort    • NotificationPort      • ScreenerPort                           │   │
+│   └──────────────────────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                           │                   │                     │
+                           │  Implemented by Secondary / Driven Adapters
+                           ▼                   ▼                     ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                             SECONDARY ADAPTERS (Driven / Outbound)                                   │
+│       yfinance / Screener.in / Concall APIs       SQLite / Postgres       Telegram / Email           │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -66,73 +73,84 @@ stock_analysis/
 ├── src/
 │   └── stock_analysis/
 │       │
-│       ├── tools/                                # TIER 1: ON-DEMAND DATA TOOLS & MCP
+│       ├── app/                                          # APPLICATION CORE (Inside)
 │       │   ├── __init__.py
-│       │   ├── base.py                           # Abstract Tool interface
-│       │   ├── financials.py                     # Normalized balance sheets, P&L, cash flows, ratios
-│       │   ├── market_data.py                    # Live quotes, historical valuation multiples, OHLCV
-│       │   ├── transcripts.py                    # Concall transcripts & management guidance search
-│       │   ├── screener.py                       # External stock screener API client
-│       │   └── mcp_server.py                     # FastMCP registry exposing all tools via MCP protocol
+│       │   │
+│       │   ├── commands.py                               # Inbound DTOs (AnalyzeStockCommand, DiscoverStocksCommand)
+│       │   ├── use_cases.py                              # Application orchestration (AnalyzeStockUseCase, WeeklyDiscoveryUseCase)
+│       │   │
+│       │   ├── domain/                                   # DOMAIN CORE: Entities & Value Objects
+│       │   │   ├── __init__.py
+│       │   │   ├── enums.py                              # Exchange, RecommendationAction, RiskLevel, ScenarioType
+│       │   │   ├── analysis.py                           # InvestmentThesis, FundamentalsAudit, TechnicalAudit, GovernanceAudit
+│       │   │   ├── valuation.py                          # ValuationScenario, FuturePriceMatrix (Bull / Base / Bear)
+│       │   │   └── discovery.py                          # WeeklyDigest, MultibaggerPick
+│       │   │
+│       │   └── ports/                                    # DEPENDENCY BOUNDARIES (Abstract Interfaces)
+│       │       ├── __init__.py
+│       │       └── outbound.py                           # FinancialDataPort, MarketDataPort, ThesisRepositoryPort, NotificationPort
 │       │
-│       ├── agents/                               # TIER 2: SPECIALIST AGENTS & REASONING
+│       ├── adapters/                                     # CONCRETE ADAPTERS (Outside)
 │       │   ├── __init__.py
-│       │   ├── prompts.py                        # System prompts & analytical guardrails
-│       │   ├── specialists.py                    # FundamentalsAgent, ValuationAgent, GovernanceAgent
-│       │   └── orchestrator.py                   # Swappable runner (LangGraph / Google Agent SDK)
+│       │   │
+│       │   ├── inbound/                                  # PRIMARY ADAPTERS (Driving)
+│       │   │   ├── __init__.py
+│       │   │   ├── api.py                                # FastAPI REST adapter
+│       │   │   ├── cli.py                                # Typer interactive terminal CLI adapter
+│       │   │   └── scheduler.py                          # APScheduler cron adapter for weekend top 5
+│       │   │
+│       │   └── outbound/                                 # SECONDARY ADAPTERS (Driven)
+│       │       ├── __init__.py
+│       │       ├── data/                                 # Market & Financial data adapters (implements Outbound Ports)
+│       │       │   ├── __init__.py
+│       │       │   ├── financials.py                     # Normalized balance sheets, P&L, cash flows, ratios
+│       │       │   ├── market_data.py                    # Live quotes, historical valuation multiples, OHLCV
+│       │       │   ├── screener.py                       # External stock screener API client
+│       │       │   ├── transcripts.py                    # Concall transcripts & management guidance search
+│       │       │   └── mcp_server.py                     # FastMCP registry exposing all data adapters via MCP protocol
+│       │       ├── repository.py                         # Implements ThesisRepositoryPort (Pydantic-to-SQLite/Postgres, NO ORM)
+│       │       └── notifications.py                      # Implements NotificationPort (Telegram / Email alerts)
 │       │
-│       ├── app/                                  # TIER 3: BACKEND CORE & PERSISTENCE
+│       ├── agents/                                       # AI REASONING LAYER (Specialist LLM Agents)
 │       │   ├── __init__.py
-│       │   ├── models/                           # Modular Pydantic domain models
-│       │   │   ├── __init__.py                   # Model registry & public exports
-│       │   │   ├── enums.py                      # Exchange, RecommendationAction, RiskLevel
-│       │   │   ├── analysis.py                   # On-demand analysis models (AnalyzeStockInput, AnalysisReport)
-│       │   │   ├── discovery.py                  # Weekly discovery models (DiscoverStocksInput, WeeklyDigest)
-│       │   │   ├── technicals.py                 # Technical indicators & trend analysis
-│       │   │   ├── fundamentals.py               # Growth, margins, ROCE, debt health
-│       │   │   └── valuation.py                  # Multi-year price matrix & scenario models
-│       │   ├── use_cases.py                      # AnalyzeStockUseCase, WeeklyDiscoveryUseCase
-│       │   ├── unit_of_work.py                   # Atomic transaction context manager (`with uow:`)
-│       │   ├── repository.py                     # Pydantic-to-SQLite/Postgres JSON store (NO ORM!)
-│       │   └── notifications.py                  # Outbound Telegram / Email alerts
+│       │   ├── prompts.py                                # System prompts & analytical guardrails
+│       │   ├── specialists.py                            # FundamentalsAgent, ValuationAgent, GovernanceAgent
+│       │   └── orchestrator.py                           # Swappable runner (LangGraph / Google Agent SDK)
 │       │
-│       ├── entrypoints/                          # TIER 4: INBOUND ENTRYPOINTS
-│       │   ├── __init__.py
-│       │   ├── api.py                            # FastAPI application & REST endpoints
-│       │   ├── cli.py                            # Typer interactive terminal CLI
-│       │   └── scheduler.py                      # APScheduler cron runner for weekend top 5
-│       │
-│       ├── bootstrap.py                          # DI Root (Wires tools -> agents -> app)
-│       └── config.py                             # Settings, environment variables, API keys
+│       ├── bootstrap.py                                  # Composition Root — wires adapters to ports & injects into use cases
+│       └── config.py                                     # Settings, environment variables, API keys
 │
 ├── tests/
 │   ├── unit/
-│   │   ├── test_tools.py                         # Mock HTTP tests for tool parsers
-│   │   ├── test_agents.py                        # Mock tool tests for agent reasoning
-│   │   └── test_use_cases.py                     # In-memory FakeUnitOfWork tests
+│   │   ├── test_domain.py                                # Domain entity & value object tests
+│   │   ├── test_use_cases.py                             # In-memory FakeRepository use case tests
+│   │   └── test_agents.py                                # Mock tool tests for agent reasoning
 │   └── e2e/
-│       └── test_api.py                           # FastAPI TestClient end-to-end tests
+│       └── test_api.py                                   # FastAPI TestClient end-to-end tests
 │
-├── .dockerignore                                 # Build context ignore rules
-├── .env.example                                  # Environment variables and API keys template
-├── docker-compose.yml                            # Multi-container orchestration (API, Scheduler, DB)
-├── Dockerfile                                    # Multi-stage production container build
-├── pyproject.toml                                # Dependency specification & build configuration
-├── REQUIREMENTS.md                               # Comprehensive system requirements
-├── LLD.md                                        # Low-Level Design specification
+├── .dockerignore                                         # Build context ignore rules
+├── .env.example                                          # Environment variables and API keys template
+├── docker-compose.yml                                    # Multi-container orchestration (API, Scheduler, DB)
+├── Dockerfile                                            # Multi-stage production container build
+├── pyproject.toml                                        # Dependency specification & build configuration
+├── REQUIREMENTS.md                                       # Comprehensive system requirements
+├── LLD.md                                                # Low-Level Design specification
 └── README.md
 ```
 
 ---
 
-## 4. Naming Conventions & Layer Isolation Invariants
+## 4. Layer Responsibilities & Isolation Invariants
 
 | Layer | Responsibility | Isolation Invariant |
 | :--- | :--- | :--- |
-| **`tools/`** | Fetches live market quotes, filings, concalls, and screener results on demand. | **Zero** knowledge of Agents or Databases. Functions only take parameters and return clean data structures. |
-| **`agents/`** | Cognitive LLM reasoning layer (Fundamentals, Valuation, Governance, Synthesis). | **Zero** knowledge of FastAPI routes or database tables. Receives tools via dependency injection. |
-| **`app/`** | Coordinates business use cases, manages database transactions, and persists reports. | **Zero** knowledge of prompt engineering or external API wire formats. Uses Unit of Work for storage. |
-| **`entrypoints/`** | Inbound triggers (REST API, CLI, Cron). | Ultra-thin adapters. Parses user input, invokes use cases, and serializes JSON responses. |
-| **`bootstrap.py`** | Composition Root. | The **only** place in the codebase where concrete tools, agents, and storage adapters are wired together. |
+| **`adapters/inbound/`** | Primary Adapters — parse raw HTTP requests, CLI args, and cron triggers into Commands. | **Zero** domain logic. Constructs Commands and delegates entirely to Use Cases. |
+| **`app/commands.py`** | Inbound DTOs representing user intent (Commands). | **Zero** knowledge of HTTP, CLI, or DB. Pure Python dataclasses / Pydantic models. |
+| **`app/use_cases.py`** | Application orchestration — coordinates agents, ports, and domain assembly. | **Zero** knowledge of HTTP routes, DB wire formats, or external API structures. |
+| **`app/domain/`** | Domain Core — pure business entities and value objects encoding the investment thesis logic. | **Zero** knowledge of FastAPI, databases, or external APIs. No I/O of any kind. |
+| **`app/ports/outbound.py`** | Abstract Port interfaces defining what the Application Core needs from the outside world. | **Zero** knowledge of concrete implementations. Pure Python `Protocol` or `ABC` definitions. |
+| **`adapters/outbound/`** | Secondary Adapters — concrete implementations of Outbound Ports (market data APIs, DB, notifications). | **Zero** domain logic. Purely maps external data to the contracts defined by Outbound Ports. |
+| **`agents/`** | AI Reasoning Layer — specialist LLM agents invoked by Use Cases to produce domain value objects. | **Zero** knowledge of FastAPI routes or DB tables. Receives Port interfaces via dependency injection. |
+| **`bootstrap.py`** | Composition Root. | The **only** place where concrete adapters are instantiated and wired to ports and use cases. |
 
 ---

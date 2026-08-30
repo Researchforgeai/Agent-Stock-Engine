@@ -106,6 +106,11 @@ stock_analysis/
 │   └── e2e/
 │       └── test_api.py                           # FastAPI TestClient end-to-end tests
 │
+├── .dockerignore                                 # Build context ignore rules
+├── .env.example                                  # Environment variables and API keys template
+├── docker-compose.yml                            # Multi-container orchestration (API, Scheduler, DB)
+├── Dockerfile                                    # Multi-stage production container build
+├── pyproject.toml                                # Dependency specification & build configuration
 ├── REQUIREMENTS.md                               # Comprehensive system requirements
 ├── LLD.md                                        # Low-Level Design specification
 └── README.md

@@ -41,7 +41,7 @@ The system follows a strict 3-tier decoupled architecture where every layer has 
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                          TIER 3: `app/` (Backend Core)                          │
 │  (Business Logic, Domain Models & Persistence)                                  │
-│  • models.py (Pydantic Schemas)                                                 │
+│  • models/ (Pydantic Domain Schemas & Contracts)                                │
 │  • use_cases.py (Business Handlers & Workflow Orchestration)                    │
 │  • unit_of_work.py (Transaction Context Manager)                                │
 │  • repository.py (Pydantic-to-SQLite/Postgres JSON Store — NO ORM!)             │
@@ -83,7 +83,15 @@ stock_analysis/
 │       │
 │       ├── app/                                  # TIER 3: BACKEND CORE & PERSISTENCE
 │       │   ├── __init__.py
-│       │   ├── models.py                         # Pydantic Schemas (InvestmentThesis, Scenarios, Digest)
+│       │   ├── models/                           # Modular Pydantic domain models
+│       │   │   ├── __init__.py                   # Model registry & public exports
+│       │   │   ├── enums.py                      # Exchange, RecommendationAction, RiskLevel
+│       │   │   ├── inputs.py                     # AnalyzeStockInput, DiscoverStocksInput
+│       │   │   ├── technicals.py                 # Technical indicators & trend analysis
+│       │   │   ├── fundamentals.py               # Growth, margins, ROCE, debt health
+│       │   │   ├── valuation.py                  # Multi-year price matrix & scenario models
+│       │   │   ├── thesis.py                     # InvestmentThesis & ThesisAntiThesis
+│       │   │   └── discovery.py                  # WeeklyDigest & Multibagger candidate models
 │       │   ├── use_cases.py                      # AnalyzeStockUseCase, WeeklyDiscoveryUseCase
 │       │   ├── unit_of_work.py                   # Atomic transaction context manager (`with uow:`)
 │       │   ├── repository.py                     # Pydantic-to-SQLite/Postgres JSON store (NO ORM!)
@@ -129,4 +137,3 @@ stock_analysis/
 | **`bootstrap.py`** | Composition Root. | The **only** place in the codebase where concrete tools, agents, and storage adapters are wired together. |
 
 ---
-

@@ -2,6 +2,19 @@
 
 An AI-assisted financial intelligence engine designed for evidence-backed fundamental equity research, probabilistic valuation forecasting, and automated stock discovery for Indian equities (NSE & BSE).
 
+## Implementation Status
+
+The current implementation provides a stock quote tool backed by the saved Reliance
+sample and wired into a Google ADK research agent. Sample quotes are historical,
+not live market data.
+
+The capabilities, architecture, and directory structure below describe the target
+design, not a list of implemented features. Domain types and port methods are added
+only when a working feature needs them. Currently, the core contains `Exchange`,
+`StockQuote`, and `MarketDataPort.get_quote`; package initializers remain empty.
+Price history, financial statements, screening, transcripts, and valuation scenarios
+are deferred until their corresponding features are implemented.
+
 ---
 
 ## 1. Core MVP Capabilities

@@ -112,6 +112,9 @@ stock_analysis/
 │       │       │   ├── __init__.py
 │       │       │   ├── nse_client.py                     # Client for NSE's hosted MCP servers
 │       │       │   └── nse_settings.py                   # Validated NSE endpoint configuration
+│       │       ├── llm/                                  # Provider-specific language model adapter
+│       │       │   ├── __init__.py
+│       │       │   └── azure_foundry.py                  # Azure AI Foundry factory returning LangChain BaseChatModel
 │       │       ├── tools/                                # LLM-CALLABLE TOOL WRAPPERS (independent of any specific agent)
 │       │       │   ├── __init__.py
 │       │       │   ├── financials_tool.py                # Wraps financials data adapter as LLM-callable tool schema
@@ -171,7 +174,7 @@ stock_analysis/
 
 The outbound MCP integration includes a client for NSE's two hosted MCP servers: `nse-bhavcopy` (historical/end-of-day tools) and `cm-market` (cash-market tools). This is an **MCP client**, distinct from the optional `mcp_server.py` that may expose this application's own tools. The client discovers tool schemas from NSE and invokes only tools advertised by the selected endpoint; the application core does not depend on the MCP SDK. It is a provider client, not yet an implementation of an application-owned market-data port.
 
-Requires Python 3.10 or newer. Install the project and its MCP SDK dependency with `uv sync` (or `pip install -e .`). The endpoint URLs default to NSE's official URLs and can be overridden with `NSE_BHAVCOPY_MCP_URL` and `NSE_CM_MARKET_MCP_URL`; overrides must remain HTTPS URLs on `mcp.nseindia.in`.
+Requires Python 3.11 or newer. Install the project and its MCP SDK dependency with `uv sync` (or `pip install -e .`). The endpoint URLs default to NSE's official URLs and can be overridden with `NSE_BHAVCOPY_MCP_URL` and `NSE_CM_MARKET_MCP_URL`; overrides must remain HTTPS URLs on `mcp.nseindia.in`.
 
 ```python
 import asyncio
@@ -196,3 +199,9 @@ asyncio.run(main())
 ```
 
 Use the client as an async context manager so sessions are closed cleanly. NSE MCP data is for informational, non-commercial use; it is not investment advice. Intraday data is delayed, and historical prices may be unadjusted for corporate actions. Check NSE's [MCP page and terms](https://www.nseindia.com/nse-mcp) before using the data.
+
+## 6. LLM Provider
+
+The Azure AI Foundry integration lives in `adapters/outbound/llm/azure_foundry.py` and constructs a LangChain `BaseChatModel`. Application and domain code should not import Azure-specific classes. This API-key setup expects a direct Foundry model/service endpoint; project endpoints typically require Microsoft Entra authentication and are not covered here. Configure `AZURE_AI_FOUNDRY_ENDPOINT`, `AZURE_AI_FOUNDRY_API_KEY`, and `AZURE_AI_FOUNDRY_MODEL` through the process environment; `.env.example` documents the names, while `.gitignore` excludes local secret files. The Foundry integration requires Python 3.11 or newer.
+
+Run unit tests with `uv run python -m unittest discover -v`. To make a live, billable smoke-test request, set the three Foundry variables and `RUN_AZURE_FOUNDRY_SMOKE_TEST=1`, then run `uv run python -m unittest tests.integration.test_azure_foundry_smoke -v`.

@@ -97,7 +97,8 @@ stock_analysis/
 │       │   │   ├── __init__.py
 │       │   │   ├── api.py                                # FastAPI REST adapter
 │       │   │   ├── cli.py                                # Typer interactive terminal CLI adapter
-│       │   │   └── scheduler.py                          # APScheduler cron adapter for weekend top 5
+│       │   │   ├── scheduler.py                          # APScheduler cron adapter for weekend top 5
+│       │   │   └── mcp_server.py                         # Optional MCP interface exposed by this application
 │       │   │
 │       │   └── outbound/                                 # SECONDARY ADAPTERS (Driven)
 │       │       ├── __init__.py
@@ -106,8 +107,11 @@ stock_analysis/
 │       │       │   ├── financials.py                     # Normalized balance sheets, P&L, cash flows, ratios
 │       │       │   ├── market_data.py                    # Live quotes, historical valuation multiples, OHLCV
 │       │       │   ├── screener.py                       # External stock screener API client
-│       │       │   ├── transcripts.py                    # Concall transcripts & management guidance search
-│       │       │   └── mcp_server.py                     # FastMCP registry exposing all data adapters via MCP protocol
+│       │       │   └── transcripts.py                    # Concall transcripts & management guidance search
+│       │       ├── mcp/                                  # MCP protocol clients for upstream providers
+│       │       │   ├── __init__.py
+│       │       │   ├── nse_client.py                     # Client for NSE's hosted MCP servers
+│       │       │   └── nse_settings.py                   # Validated NSE endpoint configuration
 │       │       ├── tools/                                # LLM-CALLABLE TOOL WRAPPERS (independent of any specific agent)
 │       │       │   ├── __init__.py
 │       │       │   ├── financials_tool.py                # Wraps financials data adapter as LLM-callable tool schema
@@ -130,7 +134,8 @@ stock_analysis/
 │   ├── unit/
 │   │   ├── test_domain.py                                # Domain entity & value object tests
 │   │   ├── test_use_cases.py                             # In-memory FakeRepository use case tests
-│   │   └── test_agents.py                                # Mock tool tests for agent reasoning
+│   │   ├── test_agents.py                                # Mock tool tests for agent reasoning
+│   │   └── test_nse_mcp_client.py                    # NSE MCP client tests
 │   └── e2e/
 │       └── test_api.py                                   # FastAPI TestClient end-to-end tests
 │
@@ -150,7 +155,7 @@ stock_analysis/
 
 | Layer | Responsibility | Isolation Invariant |
 | :--- | :--- | :--- |
-| **`adapters/inbound/`** | Primary Adapters — parse raw HTTP requests, CLI args, and cron triggers into Commands. | **Zero** domain logic. Constructs Commands and delegates entirely to Use Cases. |
+| **`adapters/inbound/`** | Primary Adapters — translate HTTP, CLI, cron, and optional MCP requests into application operations. | **Zero** domain logic. Constructs Commands and delegates entirely to Use Cases. |
 | **`app/commands.py`** | Inbound DTOs representing user intent (Commands). | **Zero** knowledge of HTTP, CLI, or DB. Pure Python dataclasses / Pydantic models. |
 | **`app/use_cases.py`** | Application orchestration — coordinates agents, ports, and domain assembly. | **Zero** knowledge of HTTP routes, DB wire formats, or external API structures. |
 | **`app/domain/`** | Domain Core — pure business entities and value objects encoding the investment thesis logic. | **Zero** knowledge of FastAPI, databases, or external APIs. No I/O of any kind. |
@@ -161,3 +166,33 @@ stock_analysis/
 | **`bootstrap.py`** | Composition Root. | The **only** place where concrete adapters are instantiated and wired to ports, tools, and use cases. |
 
 ---
+
+## 5. NSE MCP Client
+
+The outbound MCP integration includes a client for NSE's two hosted MCP servers: `nse-bhavcopy` (historical/end-of-day tools) and `cm-market` (cash-market tools). This is an **MCP client**, distinct from the optional `mcp_server.py` that may expose this application's own tools. The client discovers tool schemas from NSE and invokes only tools advertised by the selected endpoint; the application core does not depend on the MCP SDK. It is a provider client, not yet an implementation of an application-owned market-data port.
+
+Requires Python 3.10 or newer. Install the project and its MCP SDK dependency with `uv sync` (or `pip install -e .`). The endpoint URLs default to NSE's official URLs and can be overridden with `NSE_BHAVCOPY_MCP_URL` and `NSE_CM_MARKET_MCP_URL`; overrides must remain HTTPS URLs on `mcp.nseindia.in`.
+
+```python
+import asyncio
+
+from stock_analysis.adapters.outbound.mcp import NseMcpClient, NseMcpServer
+
+
+async def main() -> None:
+    async with NseMcpClient() as nse:
+        for tool in nse.list_tools(NseMcpServer.CM_MARKET):
+            print(tool.name, tool.description, tool.input_schema)
+
+        result = await nse.call_tool(
+            NseMcpServer.CM_MARKET,
+            "cm_get_index_quote",
+            {"indexName": "NIFTY 50"},
+        )
+        print(result.structured_content or result.content)
+
+
+asyncio.run(main())
+```
+
+Use the client as an async context manager so sessions are closed cleanly. NSE MCP data is for informational, non-commercial use; it is not investment advice. Intraday data is delayed, and historical prices may be unadjusted for corporate actions. Check NSE's [MCP page and terms](https://www.nseindia.com/nse-mcp) before using the data.

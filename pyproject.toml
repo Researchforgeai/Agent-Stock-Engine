@@ -6,8 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "agent-stock-engine"
 version = "0.1.0"
 description = "Indian equity research and NSE MCP integration"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
+    "langchain-azure-ai>=1.3,<2",
+    "langchain-core>=1,<2",
     "mcp>=2.3,<3",
 ]
 
